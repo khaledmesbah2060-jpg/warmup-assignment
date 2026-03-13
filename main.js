@@ -57,7 +57,7 @@ const DAY_INDEX = {
 };
 
 // Eid date range
-const EID_START = new Date(2025, 3, 10); // Apr=3 (0-based)
+const EID_START = new Date(2025, 3, 10); 
 const EID_END   = new Date(2025, 3, 30);
 
 function isEid(dateObj) {
@@ -65,60 +65,81 @@ function isEid(dateObj) {
 }
 
 // Quotas (in seconds)
-const NORMAL_QUOTA_SEC = (8 * 3600) + (24 * 60); // 8h 24m
+const NORMAL_QUOTA_SEC = (8 * 3600) + (24 * 60); 
 const EID_QUOTA_SEC = 6 * 3600;
 
 // ===================== Function 1 =====================
 function getShiftDuration(startTime, endTime) {
-    let start = toSeconds12(startTime);
-    let end = toSeconds12(endTime);
-    if (end < start) end += 24 * 3600; // overnight
-    return secondsToHMS(end - start);
+    let s = toSeconds12(startTime);
+    let e = toSeconds12(endTime);
+
+    
+    if (e < s) {
+        e += 24 * 3600;
+    }
+
+    const diff = e - s;
+    return secondsToHMS(diff);
 }
+
 
 // ===================== Function 2 =====================
-// Idle time = time outside [08:00, 22:00] inclusive
+
 function getIdleTime(startTime, endTime) {
-    let start = toSeconds12(startTime);
-    let end = toSeconds12(endTime);
-    if (end < start) end += 24 * 3600;
+    let startSec = toSeconds12(startTime);
+    let endSec   = toSeconds12(endTime);
 
-    const DAY = 24 * 3600;
-    let totalIdle = 0;
-    let cur = start;
-
-    while (cur < end) {
-        const curDayStart = Math.floor(cur / DAY) * DAY;
-        const segEnd = Math.min(end, curDayStart + DAY);
-
-        const windowStart = curDayStart + (8 * 3600);   // 08:00
-        const windowEnd   = curDayStart + (22 * 3600);  // 22:00
-
-        const overlapStart = Math.max(cur, windowStart);
-        const overlapEnd   = Math.min(segEnd, windowEnd);
-
-        const active = Math.max(0, overlapEnd - overlapStart);
-        const segment = segEnd - cur;
-        totalIdle += (segment - active);
-
-        cur = segEnd;
+   
+    if (endSec < startSec) {
+        endSec += 24 * 3600;
     }
-    return secondsToHMS(totalIdle);
-}
 
+    const DAY_LEN = 24 * 3600;
+    let idleTotal = 0;
+    let pointer = startSec;
+
+    while (pointer < endSec) {
+        const dayStart = Math.floor(pointer / DAY_LEN) * DAY_LEN;
+        const dayEnd   = dayStart + DAY_LEN;
+        const segmentEnd = Math.min(endSec, dayEnd);
+
+        const workStart = dayStart + 8 * 3600;    
+        const workEnd   = dayStart + 22 * 3600;  
+
+        const activeBeg = Math.max(pointer, workStart);
+        const activeEnd = Math.min(segmentEnd, workEnd);
+
+        const activeTime = Math.max(0, activeEnd - activeBeg);
+        const segment = segmentEnd - pointer;
+
+        idleTotal += (segment - activeTime);
+        pointer = segmentEnd;
+    }
+
+    return secondsToHMS(idleTotal);
+}
 // ===================== Function 3 =====================
 function getActiveTime(shiftDuration, idleTime) {
-    const shift = hmsToSeconds(shiftDuration);
-    const idle = hmsToSeconds(idleTime);
-    return secondsToHMS(shift - idle);
+    const totalShift = hmsToSeconds(shiftDuration);
+    const idleSec    = hmsToSeconds(idleTime);
+
+    const active = totalShift - idleSec;
+    return secondsToHMS(active);
 }
 
 // ===================== Function 4 =====================
 function metQuota(date, activeTime) {
-    const active = hmsToSeconds(activeTime);
-    const d = parseDateYMD(date);
-    const quota = isEid(d) ? EID_QUOTA_SEC : NORMAL_QUOTA_SEC;
-    return active >= quota;
+    const worked = hmsToSeconds(activeTime);
+    const currentDate = parseDateYMD(date);
+
+    let required;
+    if (isEid(currentDate)) {
+        required = EID_QUOTA_SEC;     
+    } else {
+        required = NORMAL_QUOTA_SEC;   
+    }
+
+    return worked >= required;
 }
 
 // ===================== Function 5 =====================
