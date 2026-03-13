@@ -68,55 +68,42 @@ function isEid(dateObj) {
 const NORMAL_QUOTA_SEC = (8 * 3600) + (24 * 60); // 8h 24m
 const EID_QUOTA_SEC = 6 * 3600;
 
-// ============================================================
-// Function 1: getShiftDuration(startTime, endTime)
-// startTime: (typeof string) formatted as hh:mm:ss am or hh:mm:ss pm
-// endTime: (typeof string) formatted as hh:mm:ss am or hh:mm:ss pm
-// Returns: string formatted as h:mm:ss
-// ============================================================
+// ===================== Function 1 =====================
 function getShiftDuration(startTime, endTime) {
-    let startSeconds = parseToSeconds(startTime);
-    let endSeconds = parseToSeconds(endTime);
-
-    if (endSeconds < startSeconds)
-        endSeconds += DAY_SECONDS;
-
-    return formatToTime(endSeconds - startSeconds);
+    let start = toSeconds12(startTime);
+    let end = toSeconds12(endTime);
+    if (end < start) end += 24 * 3600; // overnight
+    return secondsToHMS(end - start);
 }
 
-// ============================================================
-// Function 2: getIdleTime(startTime, endTime)
-// startTime: (typeof string) formatted as hh:mm:ss am or hh:mm:ss pm
-// endTime: (typeof string) formatted as hh:mm:ss am or hh:mm:ss pm
-// Returns: string formatted as h:mm:ss
-// ============================================================
+// ===================== Function 2 =====================
+// Idle time = time outside [08:00, 22:00] inclusive
 function getIdleTime(startTime, endTime) {
-    let startSeconds = parseToSeconds(startTime);
-    let endSeconds = parseToSeconds(endTime);
+    let start = toSeconds12(startTime);
+    let end = toSeconds12(endTime);
+    if (end < start) end += 24 * 3600;
 
-    if (endSeconds < startSeconds)
-        endSeconds += DAY_SECONDS;
+    const DAY = 24 * 3600;
+    let totalIdle = 0;
+    let cur = start;
 
-    let [idleTime, currentTime] = [0, startSeconds];
-    while (currentTime < endSeconds) {
-        let currentDayStart = Math.floor(currentTime / DAY_SECONDS) * DAY_SECONDS;
-        let currentDayEnd = currentDayStart + DAY_SECONDS;
+    while (cur < end) {
+        const curDayStart = Math.floor(cur / DAY) * DAY;
+        const segEnd = Math.min(end, curDayStart + DAY);
 
-        let segmentEnd = Math.min(endSeconds, currentDayEnd);
+        const windowStart = curDayStart + (8 * 3600);   // 08:00
+        const windowEnd   = curDayStart + (22 * 3600);  // 22:00
 
-        let deliveryStart = currentDayStart + DELIVERY_CONFIG.HOURS.START;
-        let deliveryEnd = currentDayStart + DELIVERY_CONFIG.HOURS.END;
+        const overlapStart = Math.max(cur, windowStart);
+        const overlapEnd   = Math.min(segEnd, windowEnd);
 
-        if (currentTime < deliveryStart)
-            idleTime += Math.max(0, Math.min(segmentEnd, deliveryStart) - currentTime);
+        const active = Math.max(0, overlapEnd - overlapStart);
+        const segment = segEnd - cur;
+        totalIdle += (segment - active);
 
-        if (segmentEnd > deliveryEnd)
-            idleTime += Math.max(0, segmentEnd - Math.max(currentTime, deliveryEnd));
-
-        currentTime = segmentEnd;
+        cur = segEnd;
     }
-
-    return formatToTime(idleTime)
+    return secondsToHMS(totalIdle);
 }
 
 // ===================== Function 3 =====================
